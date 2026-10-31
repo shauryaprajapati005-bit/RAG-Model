@@ -2,13 +2,14 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Bell, ChevronLeft, ChevronRight, FileText, GitBranch, LayoutDashboard, Menu, MessageSquare, Network, Search, Settings, Shield, Timeline, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { fetchInvestigations, fetchDocuments, createInvestigationApi, deleteDocumentApi } from "@/services/api";
+import { fetchInvestigations, fetchDocuments, createInvestigationApi, updateInvestigationApi, deleteDocumentApi } from "@/services/api";
 import type { DocumentItem, Investigation } from "@/types";
 
 interface AppContextValue {
   investigations: Investigation[];
   documents: DocumentItem[];
   addInvestigation: (input: Pick<Investigation, "name" | "description">) => Investigation;
+  updateInvestigation: (id: string, patch: Partial<Investigation>) => Promise<void>;
   addDocuments: (files: DocumentItem[]) => void;
   removeDocument: (id: string) => void;
   updateDocument: (id: string, patch: Partial<DocumentItem>) => void;
@@ -115,6 +116,16 @@ export default function AppShell() {
     return next;
   };
 
+  const updateInvestigation = async (id: string, patch: Partial<Investigation>) => {
+    setInvestigations((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+    try {
+      const updated = await updateInvestigationApi(id, patch);
+      setInvestigations((current) => current.map((item) => item.id === id ? updated : item));
+    } catch (err) {
+      console.error("Error updating investigation:", err);
+    }
+  };
+
   const removeDocument = (id: string) => {
     setDocuments((current) => current.filter((doc) => doc.id !== id));
     deleteDocumentApi(id).catch((err) => console.error("Error deleting document in backend:", err));
@@ -124,6 +135,7 @@ export default function AppShell() {
     investigations,
     documents,
     addInvestigation,
+    updateInvestigation,
     addDocuments: (files) => setDocuments((current) => [...files, ...current]),
     removeDocument,
     updateDocument: (id, patch) => setDocuments((current) => current.map((doc) => doc.id === id ? { ...doc, ...patch } : doc)),

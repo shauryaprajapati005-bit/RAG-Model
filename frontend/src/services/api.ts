@@ -128,3 +128,17 @@ export async function extractTimelineApi(investigationId: string): Promise<Timel
 export function getDocumentViewUrl(documentId: string): string {
   return `http://localhost:8000/api/documents/${documentId}/view`;
 }
+
+
+export async function updateInvestigationApi(
+  id: string,
+  data: Partial<Pick<Investigation, "status" | "name" | "description" | "priority">>
+): Promise<Investigation> {
+  const res = await fetch(`${API_BASE}/investigations/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update investigation");
+  return res.json();
+}

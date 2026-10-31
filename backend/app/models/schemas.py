@@ -9,6 +9,12 @@ class InvestigationCreate(BaseModel):
     description: Optional[str] = "New intelligence workspace ready for evidence review."
     priority: Optional[str] = "Medium"
 
+class InvestigationUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[InvestigationStatus] = None
+    priority: Optional[str] = None
+
 class Investigation(BaseModel):
     id: str
     name: str

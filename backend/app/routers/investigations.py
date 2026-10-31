@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from backend.app.database import get_database
-from backend.app.models.schemas import Investigation, InvestigationCreate
+from backend.app.models.schemas import Investigation, InvestigationCreate, InvestigationUpdate
 
 router = APIRouter(prefix="/api/investigations", tags=["Investigations"])
 
@@ -45,6 +45,27 @@ async def get_investigation(
     if not inv:
         raise HTTPException(status_code=404, detail="Investigation not found")
     return inv
+
+@router.patch("/{investigation_id}", response_model=Investigation)
+async def update_investigation(
+    investigation_id: str,
+    payload: InvestigationUpdate,
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    inv = await db["investigations"].find_one({"id": investigation_id})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    
+    update_fields = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if update_fields:
+        update_fields["updatedAt"] = "Just now"
+        await db["investigations"].update_one(
+            {"id": investigation_id},
+            {"$set": update_fields}
+        )
+    
+    updated = await db["investigations"].find_one({"id": investigation_id}, {"_id": 0})
+    return updated
 
 @router.delete("/{investigation_id}")
 async def delete_investigation(
