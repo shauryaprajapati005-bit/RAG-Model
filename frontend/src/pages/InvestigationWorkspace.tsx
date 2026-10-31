@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { addEdge, Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, type Edge, type Node, type OnConnect } from "@xyflow/react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import dagre from "@dagrejs/dagre";
+import { Background, BaseEdge, Controls, EdgeLabelRenderer, Handle, MarkerType, MiniMap, Position, ReactFlow, getBezierPath, useReactFlow, type Edge, type EdgeProps, type Node, type NodeProps, type ReactFlowInstance } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, Bot, CheckCircle2, Clock3, FileText, Filter, GitBranch, Info, LoaderCircle, MessageSquare, Paperclip, Play, RefreshCw, Search, Send, Sparkles, Trash2, UploadCloud, UserRound, Users, X, ZoomIn } from "lucide-react";
+import { ArrowLeft, Bot, Building2, CalendarDays, CheckCircle2, Clock3, ExternalLink, FileText, Filter, GitBranch, Info, LoaderCircle, MapPin, MessageSquare, Paperclip, Play, RefreshCw, Search, Send, Sparkles, Trash2, UploadCloud, UserRound, Users, X, ZoomIn } from "lucide-react";
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,9 +155,116 @@ function AssistantTab({ investigationId }: { investigationId: string }) {
   return <div className="grid min-h-[620px] gap-5 xl:grid-cols-[1fr_290px]"><section className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-[#263449] bg-[#131D30]"><div className="flex items-center justify-between border-b border-[#263449] px-4 py-3"><div className="flex items-center gap-3"><div className="grid h-8 w-8 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><Bot size={16} /></div><div><div className="text-sm font-medium text-slate-200">Investigation Assistant</div><div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Grounded Gemini RAG</div></div></div><button onClick={handleClear} data-testid="clear-chat-button" className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200"><Trash2 size={13} /> Clear</button></div><div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">{messages.map((message) => <div key={message.id} data-testid={`chat-message-${message.role}`} className={`flex gap-3 ${message.role === "user" ? "justify-end" : ""}`}>{message.role === "assistant" && <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><Bot size={14} /></div>}<div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-7 ${message.role === "user" ? "bg-cyan-400/10 text-cyan-100" : "border border-[#263449] bg-[#0D1425] text-slate-300"}`}>{message.content.split("\n").map((line, index) => <div key={`${message.id}-${index}`} className={line.match(/^\d\./) ? "mt-2" : ""}>{line || <span className="block h-2" />}</div>)}{message.citations && message.citations.length > 0 && <div className="mt-4 flex flex-wrap gap-2 border-t border-[#263449] pt-3">{message.citations.map((citation) => <button key={citation.id} onClick={() => setSelectedCitation(citation)} data-testid={`citation-${citation.id}-button`} className="inline-flex items-center gap-1.5 rounded-md border border-cyan-400/20 bg-cyan-400/5 px-2 py-1 font-mono text-[10px] text-cyan-300 hover:border-cyan-400/50"><Paperclip size={11} /> {citation.label}</button>)}</div>}</div></div>)}{loading && <div data-testid="assistant-loading-indicator" className="flex items-center gap-3 text-xs text-slate-400"><div className="grid h-7 w-7 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><Bot size={14} /></div><span className="flex items-center gap-1">Retrieving evidence & synthesizing <span className="animate-pulse">···</span></span></div>}</div><div className="border-t border-[#263449] p-3 sm:p-4"><div className="mb-3 flex flex-wrap gap-2">{suggestedQuestions.map((question) => <button key={question} onClick={() => send(question)} data-testid={`suggested-question-${question.slice(0, 12).toLowerCase().replaceAll(" ", "-")}-button`} className="rounded-full border border-[#263449] px-3 py-1.5 text-[10px] text-slate-400 hover:border-cyan-400/40 hover:text-cyan-200">{question}</button>)}</div><form onSubmit={(event) => { event.preventDefault(); send(); }} className="flex items-center gap-2"><Input value={input} onChange={(event) => setInput(event.target.value)} data-testid="ai-prompt-input" placeholder="Ask about the investigation evidence..." className="h-10 border-[#3a4a63] bg-[#0D1425] text-sm text-slate-200 placeholder:text-slate-600" /><Button type="submit" data-testid="ai-send-button" size="icon" className="h-10 w-10 shrink-0 bg-cyan-400 text-[#07111f] hover:bg-cyan-300"><Send size={16} /></Button></form></div></section><aside className="rounded-xl border border-[#263449] bg-[#0D1425] p-4"><div className="flex items-center gap-2"><Paperclip size={15} className="text-cyan-300" /><h3 className="text-sm font-medium text-slate-200">Sources & evidence</h3></div><p className="mt-2 text-xs leading-relaxed text-slate-500">Click any citation pill to inspect its supporting source passage.</p>{selectedCitation ? <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3"><div className="flex items-start justify-between gap-2"><div className="font-mono text-[10px] uppercase tracking-wider text-cyan-300">{selectedCitation.label}</div><button onClick={() => setSelectedCitation(null)} data-testid="close-citation-detail-button" className="text-slate-500 hover:text-slate-200"><X size={14} /></button></div><div className="mt-4 text-xs font-semibold text-slate-200">{selectedCitation.document}</div><div className="mt-3 border-l-2 border-cyan-400/60 pl-3 text-xs italic leading-relaxed text-slate-300">“{selectedCitation.passage}”</div><div className="mt-4 font-mono text-[10px] text-cyan-400/70">Verified evidence · Page {selectedCitation.page}</div></div> : <div className="mt-5 space-y-2">{allActiveCitations.length > 0 ? allActiveCitations.map((citation) => <button key={citation.id} onClick={() => setSelectedCitation(citation)} data-testid={`source-list-${citation.id}-button`} className="w-full rounded-lg border border-[#263449] p-3 text-left hover:border-cyan-400/30"><div className="font-mono text-[10px] text-cyan-300">{citation.label}</div><div className="mt-1 truncate text-xs text-slate-400">{citation.document}</div><div className="mt-2 line-clamp-2 text-[10px] leading-relaxed text-slate-500">{citation.passage}</div></button>) : <div className="py-8 text-center text-xs text-slate-500">No citations active. Ask a question to view supporting evidence.</div>}</div>}</aside></div>;
 }
 
-const nodeTypes: Record<EntityType, string> = { Person: "person", Organization: "organization", Event: "event", Location: "location" };
-function EvidenceNode({ data }: { data: { label: string; type: EntityType; detail: string; color: string } }) { return <div className="min-w-[140px] rounded-lg border border-[#3a4a63] bg-[#131D30] px-3 py-2 shadow-xl" style={{ borderLeftColor: data.color, borderLeftWidth: 3 }}><Handle type="target" position={Position.Left} className="!h-1.5 !w-1.5 !border-0 !bg-slate-500" /><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: data.color }} /><span className="text-xs font-medium text-slate-100">{data.label}</span></div><div className="mt-1 text-[9px] text-slate-500">{data.type} · {data.detail}</div><Handle type="source" position={Position.Right} className="!h-1.5 !w-1.5 !border-0 !bg-slate-500" /></div>; }
-const nodeTypesMap = { person: EvidenceNode, organization: EvidenceNode, event: EvidenceNode, location: EvidenceNode };
+const entityTypeColors: Record<EntityType, string> = {
+  Person: "#38BDF8",
+  Organization: "#A78BFA",
+  Location: "#34D399",
+  Event: "#FBBF24"
+};
+const entityTypeIcons = {
+  Person: UserRound,
+  Organization: Building2,
+  Location: MapPin,
+  Event: CalendarDays
+};
+
+type EvidenceNodeData = {
+  label: string;
+  type: EntityType;
+  color: string;
+  selected: boolean;
+};
+type EvidenceNodeType = Node<EvidenceNodeData>;
+type EvidenceEdgeData = {
+  relationship: RelationshipEdge;
+  shortLabel: string;
+  sourceName: string;
+  targetName: string;
+  showLabel: boolean;
+  showTooltip: boolean;
+};
+type EvidenceEdgeType = Edge<EvidenceEdgeData>;
+
+function shortRelationshipLabel(label: string) {
+  const normalized = label.trim().toLowerCase();
+  if (!normalized) return "related to";
+  if (normalized.includes("named shipper")) return "named shipper";
+  if (normalized.includes("located")) return "located in";
+  if (normalized.includes("attend")) return "attended";
+  if (normalized.includes("recipient") || normalized.includes("received")) return "sent to";
+  if (normalized.includes("registered")) return "registered in";
+  if (normalized.includes("listed")) return "listed under";
+  if (normalized.includes("met")) return "met with";
+  if (normalized.includes("transfer")) return "transferred to";
+  return normalized.replace(/[.,;:!?]+$/g, "").split(/\s+/).slice(0, 3).join(" ");
+}
+
+const EvidenceNode = memo(function EvidenceNode({ data }: NodeProps<EvidenceNodeType>) {
+  const Icon = entityTypeIcons[data.type];
+  return (
+    <div
+      className={`flex h-full w-full items-center gap-2.5 rounded-full border bg-[#131D30] px-3 shadow-lg transition-[opacity,box-shadow] ${data.selected ? "ring-2 ring-white/70 ring-offset-2 ring-offset-[#0D1425]" : ""}`}
+      style={{ borderColor: `${data.color}99`, boxShadow: `0 5px 20px ${data.color}18` }}
+      title={`${data.type}: ${data.label}`}
+    >
+      <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-2 !border-[#0D1425] !bg-slate-400" />
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full" style={{ color: data.color, backgroundColor: `${data.color}20` }}>
+        <Icon size={14} strokeWidth={2} />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-100">{data.label}</span>
+      <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-2 !border-[#0D1425] !bg-slate-400" />
+    </div>
+  );
+});
+const nodeTypesMap = { entity: EvidenceNode };
+
+const EvidenceRelationshipEdge = memo(function EvidenceRelationshipEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  style,
+  data,
+  interactionWidth
+}: EdgeProps<EvidenceEdgeType>) {
+  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, curvature: 0.25 });
+  return (
+    <>
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} />
+      {data?.showLabel && (
+        <EdgeLabelRenderer>
+          <div
+            className="pointer-events-none nodrag nopan absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
+            style={{ left: labelX, top: labelY }}
+          >
+            {data.showTooltip && (
+              <span className="max-w-[240px] rounded-md border border-[#334155] bg-[#0B1020] px-2 py-1 text-center text-[10px] font-medium text-slate-100 shadow-xl">
+                {data.sourceName} → {data.shortLabel} → {data.targetName}
+              </span>
+            )}
+            <span className="whitespace-nowrap rounded-md border border-[#334155] bg-[#131D30] px-2 py-1 text-[10px] font-medium text-slate-100 shadow-lg">
+              {data.shortLabel}
+            </span>
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+});
+const edgeTypesMap = { evidence: EvidenceRelationshipEdge };
+
+function FitGraphOnLayout({ layoutKey }: { layoutKey: string }) {
+  const { fitView } = useReactFlow<EvidenceNodeType, EvidenceEdgeType>();
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => { void fitView({ padding: 0.22, duration: 350 }); });
+    return () => cancelAnimationFrame(frame);
+  }, [fitView, layoutKey]);
+  return null;
+}
 
 const defaultSeedEdges: RelationshipEdge[] = [
   { id: "e-alex-transaction", investigationId: "inv-orion-001", source: "alex", target: "transaction", label: "initiated", status: "Confirmed", document: "Report A", page: 3, quote: "The ledger records an outgoing transfer of €280,000 from the account attributed to Alex Mercer." },
@@ -170,13 +278,19 @@ const defaultSeedEdges: RelationshipEdge[] = [
 
 function GraphTab({ investigationId }: { investigationId: string }) {
   const [typeFilter, setTypeFilter] = useState<EntityType | "All">("All");
+  const [statusFilter, setStatusFilter] = useState<RelationshipEdge["status"] | "All">("All");
+  const [documentFilter, setDocumentFilter] = useState("All documents");
+  const [hideOrphans, setHideOrphans] = useState(false);
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Entity | null>(null);
-  const [relationship, setRelationship] = useState<{ label: string; status: string; source: string; page: number; quote?: string } | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [graphData, setGraphData] = useState<{ entities: Entity[]; edges: RelationshipEdge[] }>({
     entities: seedEntities,
     edges: defaultSeedEdges,
   });
   const [loading, setLoading] = useState(false);
+  const flow = useRef<ReactFlowInstance<EvidenceNodeType, EvidenceEdgeType> | null>(null);
 
   const loadGraph = () => {
     setLoading(true);
@@ -208,48 +322,391 @@ function GraphTab({ investigationId }: { investigationId: string }) {
     }
   };
 
-  const currentEntities = graphData.entities.filter((entity) => typeFilter === "All" || entity.type === typeFilter);
+  const documents = useMemo(
+    () => [...new Set(graphData.edges.map((edge) => edge.document).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [graphData.edges]
+  );
+  const layout = useMemo(() => {
+    const filteredEntities = graphData.entities
+      .filter((entity) => typeFilter === "All" || entity.type === typeFilter)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const connectedIds = new Set(graphData.edges.flatMap((edge) => [edge.source, edge.target]));
+    const orphanEntities = filteredEntities.filter((entity) => !connectedIds.has(entity.id));
+    const entities = hideOrphans ? filteredEntities.filter((entity) => connectedIds.has(entity.id)) : filteredEntities;
+    const entityIds = new Set(entities.map((entity) => entity.id));
+    const relationships = graphData.edges.filter((edge) =>
+      entityIds.has(edge.source)
+      && entityIds.has(edge.target)
+      && (statusFilter === "All" || edge.status === statusFilter)
+      && (documentFilter === "All documents" || edge.document === documentFilter)
+    );
+    const relationshipTypes = [...new Set(graphData.edges.map((edge) => shortRelationshipLabel(edge.label)))].sort((a, b) => a.localeCompare(b));
+    const relationshipColors = new Map(relationshipTypes.map((label, index) => [
+      label,
+      `hsl(${Math.round(index * 360 / Math.max(1, relationshipTypes.length))} 75% 68%)`
+    ]));
+    const degree = new Map<string, number>();
+    for (const edge of relationships) {
+      degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
+      degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
+    }
 
-  const centerX = 400;
-  const centerY = 280;
-  const radiusX = Math.max(220, Math.min(320, currentEntities.length * 36));
-  const radiusY = Math.max(160, Math.min(240, currentEntities.length * 28));
-  const angleStep = (2 * Math.PI) / Math.max(1, currentEntities.length);
+    const dimensions = new Map<string, { width: number; height: number }>();
+    const graph = new dagre.graphlib.Graph({ multigraph: true });
+    graph.setDefaultEdgeLabel(() => ({}));
+    graph.setGraph({ rankdir: "LR", ranksep: 135, nodesep: 52, edgesep: 24, marginx: 64, marginy: 64 });
 
-  const nodes: Node[] = currentEntities.map((entity, index) => {
-    const x = Math.round(centerX + radiusX * Math.cos(index * angleStep));
-    const y = Math.round(centerY + radiusY * Math.sin(index * angleStep));
-    return {
-      id: entity.id,
-      type: nodeTypes[entity.type] || "person",
-      position: { x, y },
-      data: { label: entity.name, type: entity.type, detail: entity.detail, color: entity.color }
-    };
-  });
+    for (const entity of entities) {
+      const connections = degree.get(entity.id) ?? 0;
+      const size = connections >= 5 ? 2 : connections >= 2 ? 1 : 0;
+      const nodeSize = { width: 164 + size * 10, height: 46 + size * 4 };
+      dimensions.set(entity.id, nodeSize);
+      graph.setNode(entity.id, nodeSize);
+    }
+    for (const edge of relationships) {
+      graph.setEdge({ v: edge.source, w: edge.target, name: edge.id }, { weight: 1, minlen: 1 });
+    }
+    dagre.layout(graph);
 
-  const visibleIds = new Set(currentEntities.map((entity) => entity.id));
-  const edges: Edge[] = graphData.edges
-    .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
-    .map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.label,
+    const nodes: EvidenceNodeType[] = entities.map((entity) => {
+      const position = graph.node(entity.id);
+      const size = dimensions.get(entity.id)!;
+      return {
+        id: entity.id,
+        type: "entity",
+        position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
+        style: { width: size.width, height: size.height },
+        data: {
+          label: entity.name,
+          type: entity.type,
+          color: entityTypeColors[entity.type],
+          selected: false
+        }
+      };
+    });
+    const entityById = new Map(entities.map((entity) => [entity.id, entity]));
+    const edges: EvidenceEdgeType[] = relationships.map((relationship) => {
+      const shortLabel = shortRelationshipLabel(relationship.label);
+      const color = relationshipColors.get(shortLabel) ?? "#94A3B8";
+      return {
+        id: relationship.id,
+        source: relationship.source,
+        target: relationship.target,
+        type: "evidence",
+        data: {
+          relationship,
+          shortLabel,
+          sourceName: entityById.get(relationship.source)?.name ?? relationship.source,
+          targetName: entityById.get(relationship.target)?.name ?? relationship.target,
+          showLabel: false,
+          showTooltip: false
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color },
+        style: {
+          stroke: color,
+          strokeWidth: 1.8,
+          strokeDasharray: relationship.status === "Possible" ? "6 5" : undefined
+        }
+      };
+    });
+    const key = `${entities.map((entity) => `${entity.id}:${entity.name}:${entity.type}:${degree.get(entity.id) ?? 0}`).join(",")}|${relationships.map((edge) => `${edge.id}:${edge.source}:${edge.target}`).join(",")}`;
+    return { nodes, edges, entities, orphanEntities, relationships, relationshipTypes, relationshipColors, key };
+  }, [graphData, typeFilter, statusFilter, documentFilter, hideOrphans]);
+
+  useEffect(() => {
+    if (selected && !layout.entities.some((entity) => entity.id === selected.id)) setSelected(null);
+    if (selectedEdgeId && !layout.relationships.some((edge) => edge.id === selectedEdgeId)) setSelectedEdgeId(null);
+    if (hoveredEdgeId && !layout.relationships.some((edge) => edge.id === hoveredEdgeId)) setHoveredEdgeId(null);
+  }, [layout.entities, layout.relationships, selected?.id, selectedEdgeId, hoveredEdgeId]);
+
+  const focusedIds = useMemo(() => {
+    if (selected) {
+      const neighbors = new Set([selected.id]);
+      for (const edge of layout.relationships) {
+        if (edge.source === selected.id) neighbors.add(edge.target);
+        if (edge.target === selected.id) neighbors.add(edge.source);
+      }
+      return neighbors;
+    }
+    if (selectedEdgeId) {
+      const edge = layout.relationships.find((relationship) => relationship.id === selectedEdgeId);
+      return edge ? new Set([edge.source, edge.target]) : new Set<string>();
+    }
+    return new Set<string>();
+  }, [layout.relationships, selected, selectedEdgeId]);
+
+  const nodes = useMemo(
+    () => layout.nodes.map((node) => ({
+      ...node,
       data: {
-        status: edge.status,
-        source: edge.document,
-        page: edge.page,
-        quote: edge.quote
+        ...node.data,
+        selected: node.id === selected?.id
       },
-      markerEnd: { type: MarkerType.ArrowClosed },
       style: {
-        stroke: edge.status === "Confirmed" ? "#22D3EE" : "#A78BFA",
-        strokeDasharray: edge.status === "Possible" ? "5 5" : undefined
-      },
-      labelStyle: { fill: "#94A3B8", fontSize: 10 }
-    }));
+        ...node.style,
+        opacity: focusedIds.size > 0 && !focusedIds.has(node.id) ? 0.16 : 1
+      }
+    })),
+    [layout.nodes, selected?.id, focusedIds]
+  );
+  const edges = useMemo(
+    () => layout.edges.map((edge) => {
+      const relationship = edge.data!.relationship;
+      const isSelected = edge.id === selectedEdgeId;
+      const isHovered = edge.id === hoveredEdgeId;
+      const connectedToSelectedNode = selected && (edge.source === selected.id || edge.target === selected.id);
+      const connectedToFocus = focusedIds.size === 0
+        || connectedToSelectedNode
+        || edge.id === selectedEdgeId;
+      const color = layout.relationshipColors.get(edge.data!.shortLabel) ?? "#94A3B8";
+      const visibleLabel = layout.edges.length <= 25 || isSelected || isHovered || Boolean(connectedToSelectedNode);
+      return {
+        ...edge,
+        data: { ...edge.data!, showLabel: visibleLabel, showTooltip: isHovered },
+        interactionWidth: 16,
+        style: {
+          ...edge.style,
+          stroke: color,
+          strokeWidth: isSelected || isHovered || connectedToSelectedNode ? 2.8 : 1.8,
+          opacity: connectedToFocus ? 0.9 : 0.08
+        }
+      };
+    }),
+    [layout.edges, layout.relationshipColors, focusedIds, hoveredEdgeId, selected, selectedEdgeId]
+  );
 
-  return <div className="space-y-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h3 className="text-lg font-semibold text-slate-100">Evidence graph</h3><p className="mt-1 text-xs text-slate-500">Every connection is backed by source document passages from MongoDB Atlas.</p></div><div className="flex items-center gap-2"><button onClick={handleReExtract} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-[#263449] bg-[#131D30] px-3 py-1.5 text-xs text-cyan-300 hover:bg-[#19253A] disabled:opacity-50"><RefreshCw size={12} className={loading ? "animate-spin" : ""} /> {loading ? "Analyzing..." : "Re-extract graph"}</button><div className="flex items-center gap-1.5 overflow-x-auto rounded-lg border border-[#263449] bg-[#0D1425] p-1">{(["All", "Person", "Organization", "Event", "Location"] as const).map((type) => <button key={type} onClick={() => setTypeFilter(type)} data-testid={`graph-filter-${type.toLowerCase()}-button`} className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[10px] ${typeFilter === type ? "bg-[#263449] text-cyan-300" : "text-slate-500 hover:text-slate-200"}`}>{type}</button>)}</div></div></div><div className="grid gap-4 xl:grid-cols-[1fr_290px]"><div className="relative h-[580px] overflow-hidden rounded-xl border border-[#263449] bg-[#0D1425]"><div className="absolute left-4 top-4 z-10 flex items-center gap-3 rounded-lg border border-[#263449] bg-[#131D30]/90 px-3 py-2 font-mono text-[9px] text-slate-500 backdrop-blur"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-cyan-300" /> Confirmed fact</span><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-300" /> Possible lead</span></div><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypesMap} fitView fitViewOptions={{ padding: 0.35 }} onNodeClick={(_, node) => { setSelected(currentEntities.find((e) => e.id === node.id) ?? null); setRelationship(null); }} onEdgeClick={(_, edge) => { setRelationship({ label: String(edge.label), status: edge.data?.status as string, source: edge.data?.source as string, page: edge.data?.page as number, quote: edge.data?.quote as string }); setSelected(null); }} proOptions={{ hideAttribution: true }}><Background color="#263449" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => String(node.data?.color ?? "#64748b")} maskColor="#0B1020cc" /></ReactFlow></div><aside className="rounded-xl border border-[#263449] bg-[#131D30] p-4">{selected ? <div><div className="flex items-start justify-between"><div><span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: selected.color }}>{selected.type}</span><h3 className="mt-2 text-lg font-semibold text-slate-100">{selected.name}</h3></div><button onClick={() => setSelected(null)} data-testid="close-graph-inspector-button" className="text-slate-500 hover:text-slate-200"><X size={15} /></button></div><p className="mt-4 text-sm leading-relaxed text-slate-400">{selected.detail}</p><div className="mt-6 border-t border-[#263449] pt-4"><div className="font-mono text-[10px] uppercase tracking-wider text-slate-600">Evidence posture</div><div className="mt-2 flex items-center gap-2 text-xs text-emerald-300"><CheckCircle2 size={14} /> Grounded in MongoDB Atlas</div><div className="mt-3 text-[10px] leading-relaxed text-slate-500">Every relationship connected to this entity is backed by an extracted report passage.</div></div></div> : relationship ? <div><div className="flex items-start justify-between"><div><span className="font-mono text-[10px] uppercase tracking-wider text-cyan-300">Relationship</span><h3 className="mt-2 text-lg font-semibold text-slate-100">{relationship.label}</h3></div><button onClick={() => setRelationship(null)} data-testid="close-relationship-inspector-button" className="text-slate-500 hover:text-slate-200"><X size={15} /></button></div><div className="mt-5 rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3"><div className="flex items-center gap-2 text-xs font-semibold text-cyan-200"><span className={`h-2 w-2 rounded-full ${relationship.status === "Confirmed" ? "bg-cyan-400" : "bg-violet-400"}`} /> {relationship.status}</div><div className="mt-2 font-mono text-[11px] text-slate-400">{relationship.source} · Page {relationship.page}</div></div>{relationship.quote && <div className="mt-4 border-l-2 border-cyan-400/50 pl-3 text-xs italic leading-relaxed text-slate-300">“{relationship.quote}”</div>}<p className="mt-4 text-xs leading-relaxed text-slate-500">Confirmed links are verified facts. Possible links represent investigatory leads pending further proof.</p></div> : <div className="flex h-full min-h-[250px] flex-col items-center justify-center text-center"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#19253A] text-slate-500"><ZoomIn size={18} /></div><h3 className="mt-4 text-sm font-medium text-slate-300">Inspect the evidence map</h3><p className="mt-2 max-w-[190px] text-xs leading-relaxed text-slate-600">Click any entity or connection edge to view its supporting source evidence.</p></div>}</aside></div></div>;
+  const clearFocus = () => {
+    setSelected(null);
+    setSelectedEdgeId(null);
+    setHoveredEdgeId(null);
+  };
+  const jumpToSearchResult = () => {
+    const entity = layout.entities.find((item) => item.name.toLowerCase() === search.trim().toLowerCase());
+    if (!entity) return;
+    setSelected(entity);
+    setSelectedEdgeId(null);
+    const node = layout.nodes.find((item) => item.id === entity.id);
+    if (node) {
+      const width = Number(node.style?.width ?? 164);
+      const height = Number(node.style?.height ?? 46);
+      flow.current?.setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: 1.15, duration: 450 });
+    }
+  };
+  const fitGraph = () => flow.current?.fitView({ padding: 0.22, duration: 450 });
+  const openDocumentList = `/investigation/${investigationId}?tab=documents`;
+  const selectedRelationship = layout.relationships.find((edge) => edge.id === selectedEdgeId);
+  const selectedEntityRelationships = selected
+    ? layout.relationships.filter((edge) => edge.source === selected.id || edge.target === selected.id)
+    : [];
+  const entityById = new Map(layout.entities.map((entity) => [entity.id, entity]));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-100">Evidence graph</h3>
+          <p className="mt-1 text-xs text-slate-500">Explore entities and inspect the source passages behind each connection.</p>
+        </div>
+        <button onClick={handleReExtract} disabled={loading} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#263449] bg-[#131D30] px-3 py-2 text-xs text-cyan-300 hover:bg-[#19253A] disabled:opacity-50">
+          <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> {loading ? "Analyzing..." : "Re-extract graph"}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#263449] bg-[#131D30] p-3">
+        <form className="relative min-w-[190px] flex-1" onSubmit={(event) => { event.preventDefault(); jumpToSearchResult(); }}>
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            list="graph-entity-options"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search entities..."
+            aria-label="Search entities"
+            className="h-9 w-full rounded-md border border-[#263449] bg-[#0D1425] pl-9 pr-12 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-cyan-400/50"
+          />
+          <button type="submit" className="absolute right-1 top-1 inline-flex h-7 items-center rounded px-2 text-[10px] text-cyan-300 hover:bg-[#19253A]" aria-label="Jump to entity">Go</button>
+          <datalist id="graph-entity-options">{layout.entities.map((entity) => <option key={entity.id} value={entity.name} />)}</datalist>
+        </form>
+        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as EntityType | "All")} aria-label="Filter by entity type" className="h-9 rounded-md border border-[#263449] bg-[#0D1425] px-2.5 text-xs text-slate-300 outline-none focus:border-cyan-400/50">
+          <option value="All">All entity types</option>
+          {(["Person", "Organization", "Location", "Event"] as const).map((type) => <option key={type} value={type}>{type}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as RelationshipEdge["status"] | "All")} aria-label="Filter by relationship status" className="h-9 rounded-md border border-[#263449] bg-[#0D1425] px-2.5 text-xs text-slate-300 outline-none focus:border-cyan-400/50">
+          <option value="All">All relationships</option>
+          <option value="Confirmed">Confirmed</option>
+          <option value="Possible">Possible</option>
+        </select>
+        <select value={documentFilter} onChange={(event) => setDocumentFilter(event.target.value)} aria-label="Filter by source document" className="h-9 max-w-full rounded-md border border-[#263449] bg-[#0D1425] px-2.5 text-xs text-slate-300 outline-none focus:border-cyan-400/50 sm:max-w-[220px]">
+          <option>All documents</option>
+          {documents.map((document) => <option key={document}>{document}</option>)}
+        </select>
+        <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#263449] bg-[#0D1425] px-2.5 text-xs text-slate-300">
+          <input type="checkbox" checked={hideOrphans} onChange={(event) => setHideOrphans(event.target.checked)} className="accent-cyan-400" />
+          Hide no connections
+        </label>
+        <button onClick={fitGraph} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#263449] bg-[#0D1425] px-3 text-xs text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200">
+          <ZoomIn size={14} /> Fit view
+        </button>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="relative h-[580px] min-h-[480px] overflow-hidden rounded-xl border border-[#263449] bg-[#0D1425]" style={{ height: "clamp(480px, 68vh, 680px)" }}>
+          <div className="absolute left-3 right-3 top-3 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-[#263449] bg-[#131D30]/95 px-3 py-2.5 text-[10px] text-slate-400 shadow-lg backdrop-blur">
+            {(["Person", "Organization", "Location", "Event"] as const).map((type) => {
+              const Icon = entityTypeIcons[type];
+              return <span key={type} className="inline-flex items-center gap-1.5"><Icon size={13} style={{ color: entityTypeColors[type] }} />{type}</span>;
+            })}
+            <span className="mx-1 hidden h-4 w-px bg-[#334155] sm:block" />
+            <span className="inline-flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-slate-300" />Confirmed</span>
+            <span className="inline-flex items-center gap-1.5"><span className="inline-block w-5 border-t-2 border-dashed border-slate-300" />Possible</span>
+            {layout.relationshipTypes.length > 0 && <span className="mx-1 hidden h-4 w-px bg-[#334155] sm:block" />}
+            {layout.relationshipTypes.map((type) => (
+              <span key={type} className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: layout.relationshipColors.get(type) }} />{type}
+              </span>
+            ))}
+          </div>
+          <ReactFlow<EvidenceNodeType, EvidenceEdgeType>
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypesMap}
+            edgeTypes={edgeTypesMap}
+            onInit={(instance) => { flow.current = instance; }}
+            onNodeClick={(_, node) => {
+              setSelected(layout.entities.find((entity) => entity.id === node.id) ?? null);
+              setSelectedEdgeId(null);
+              setHoveredEdgeId(null);
+            }}
+            onEdgeClick={(_, edge) => {
+              setSelected(null);
+              setSelectedEdgeId(edge.id);
+              setHoveredEdgeId(edge.id);
+            }}
+            onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+            onEdgeMouseLeave={(_, edge) => setHoveredEdgeId((current) => current === edge.id ? null : current)}
+            onPaneClick={clearFocus}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            fitView
+            fitViewOptions={{ padding: 0.22 }}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background color="#263449" gap={24} size={1} />
+            <Controls showInteractive={false} />
+            <FitGraphOnLayout layoutKey={layout.key} />
+            {layout.nodes.length >= 30 && <MiniMap nodeColor={(node) => String(node.data?.color ?? "#64748b")} maskColor="#0B1020cc" className="evidence-graph-minimap" />}
+          </ReactFlow>
+          {layout.nodes.length === 0 && <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center text-center"><div><GitBranch size={22} className="mx-auto text-slate-600" /><p className="mt-3 text-sm text-slate-400">No entities match these filters.</p><p className="mt-1 text-xs text-slate-600">Adjust the filters to see more of the graph.</p></div></div>}
+          <div className="absolute bottom-3 left-3 z-10 rounded-md border border-[#263449] bg-[#131D30]/90 px-2.5 py-1.5 font-mono text-[9px] text-slate-500">
+            {layout.nodes.length} entities · {layout.edges.length} relationships
+          </div>
+        </div>
+
+        <aside className="max-h-[680px] overflow-y-auto rounded-xl border border-[#263449] bg-[#131D30] p-4">
+          {selected ? (
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider" style={{ color: entityTypeColors[selected.type] }}>
+                    {(() => { const Icon = entityTypeIcons[selected.type]; return <Icon size={13} />; })()}{selected.type}
+                  </span>
+                  <h3 className="mt-2 break-words text-base font-semibold text-slate-100">{selected.name}</h3>
+                </div>
+                <button onClick={clearFocus} aria-label="Close entity details" data-testid="close-graph-inspector-button" className="shrink-0 text-slate-500 hover:text-slate-200"><X size={15} /></button>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-slate-400">{selected.detail}</p>
+              <div className="mt-5 border-t border-[#263449] pt-4">
+                <h4 className="font-mono text-[10px] uppercase tracking-wider text-slate-500">Connected evidence · {selectedEntityRelationships.length}</h4>
+                <div className="mt-3 space-y-3">
+                  {selectedEntityRelationships.map((edge) => {
+                    const source = entityById.get(edge.source);
+                    const target = entityById.get(edge.target);
+                    return (
+                      <article key={edge.id} className="rounded-lg border border-[#263449] bg-[#0D1425] p-3">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="font-medium text-slate-200">{source?.name ?? edge.source}</span><span className="text-slate-400">{shortRelationshipLabel(edge.label)}</span>
+                          {target && <span className="font-medium" style={{ color: entityTypeColors[target.type] }}>{target.name}</span>}
+                          <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[9px] ${edge.status === "Confirmed" ? "bg-sky-400/10 text-sky-300" : "bg-violet-400/10 text-violet-300"}`}>{edge.status}</span>
+                        </div>
+                        {edge.label !== shortRelationshipLabel(edge.label) && <div className="mt-2 text-[10px] text-slate-500">Full relationship: {edge.label}</div>}
+                        <div className="mt-2 text-[10px] leading-relaxed text-slate-400">{edge.quote || "No quoted passage was provided for this relationship."}</div>
+                        <Link to={openDocumentList} aria-label={`Open ${edge.document}, page ${edge.page}, in the document library`} className="mt-3 inline-flex items-center gap-1.5 text-[10px] text-cyan-300 hover:text-cyan-200">
+                          <FileText size={12} /> {edge.document} · p. {edge.page} <ExternalLink size={11} />
+                        </Link>
+                      </article>
+                    );
+                  })}
+                  {selectedEntityRelationships.length === 0 && <p className="text-xs text-slate-500">No relationships match the current filters.</p>}
+                </div>
+              </div>
+            </div>
+          ) : selectedRelationship ? (
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-sky-300">Relationship · {selectedRelationship.status}</span>
+                  <h3 className="mt-2 text-base font-semibold text-slate-100">{selectedRelationship.label}</h3>
+                </div>
+                <button onClick={clearFocus} aria-label="Close relationship details" data-testid="close-relationship-inspector-button" className="shrink-0 text-slate-500 hover:text-slate-200"><X size={15} /></button>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-md bg-[#0D1425] px-2 py-1 text-slate-300">{entityById.get(selectedRelationship.source)?.name ?? selectedRelationship.source}</span>
+                <span className="text-slate-400">{shortRelationshipLabel(selectedRelationship.label)}</span>
+                <span className="text-slate-600">→</span>
+                <span className="rounded-md bg-[#0D1425] px-2 py-1 text-slate-300">{entityById.get(selectedRelationship.target)?.name ?? selectedRelationship.target}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[9px] ${selectedRelationship.status === "Confirmed" ? "bg-sky-400/10 text-sky-300" : "bg-violet-400/10 text-violet-300"}`}>{selectedRelationship.status}</span>
+              </div>
+              {selectedRelationship.label !== shortRelationshipLabel(selectedRelationship.label) && (
+                <p className="mt-3 text-[10px] leading-relaxed text-slate-500">Full relationship text: {selectedRelationship.label}</p>
+              )}
+              <div className="mt-5 border-t border-[#263449] pt-4">
+                <h4 className="font-mono text-[10px] uppercase tracking-wider text-slate-500">Source citation</h4>
+                <blockquote className="mt-3 border-l-2 border-sky-400/50 pl-3 text-xs italic leading-relaxed text-slate-300">
+                  {selectedRelationship.quote || "No quoted passage was provided for this relationship."}
+                </blockquote>
+                <Link to={openDocumentList} aria-label={`Open ${selectedRelationship.document}, page ${selectedRelationship.page}, in the document library`} className="mt-4 inline-flex items-center gap-1.5 text-xs text-cyan-300 hover:text-cyan-200">
+                  <FileText size={13} /> {selectedRelationship.document} · p. {selectedRelationship.page} <ExternalLink size={12} />
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="flex min-h-[120px] flex-col items-center justify-center text-center">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#19253A] text-slate-500"><ZoomIn size={18} /></div>
+                <h3 className="mt-4 text-sm font-medium text-slate-300">Inspect the evidence map</h3>
+                <p className="mt-2 max-w-[220px] text-xs leading-relaxed text-slate-500">Select an entity or relationship to review its connected evidence and source citations.</p>
+              </div>
+              {layout.orphanEntities.length > 0 && (
+                <section className="border-t border-[#263449] pt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-mono text-[10px] uppercase tracking-wider text-slate-500">No connections</h4>
+                    <span className="rounded-full bg-[#0D1425] px-2 py-0.5 font-mono text-[9px] text-slate-500">{layout.orphanEntities.length}</span>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-relaxed text-slate-600">These entities have no extracted relationships.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {layout.orphanEntities.map((entity) => (
+                      <button
+                        key={entity.id}
+                        title={entity.name}
+                        onClick={() => {
+                          setHideOrphans(false);
+                          setSelected(entity);
+                          setSelectedEdgeId(null);
+                        }}
+                        className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#263449] bg-[#0D1425] px-2 py-1.5 text-left text-[10px] text-slate-300 hover:border-cyan-400/40"
+                      >
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: entityTypeColors[entity.type] }} />
+                        <span className="truncate">{entity.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
 }
 
 function TimelineTab({ investigationId }: { investigationId: string }) {

@@ -3183,26 +3183,40 @@
 button, a, input, textarea, select {
   transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease, opacity 160ms ease;
 }
-.react-flow__controls {
+.react-flow .react-flow__controls {
   overflow: hidden;
   border: 1px solid #263449;
   border-radius: 8px;
+  background: #131D30;
   box-shadow: none;
 }
-.react-flow__controls-button {
+.react-flow .react-flow__controls-button {
   border-bottom: 1px solid #263449;
   background: #131D30;
+  color: #94A3B8;
   fill: #94A3B8;
 }
-.react-flow__controls-button:hover {
+.react-flow .react-flow__controls-button:hover {
   background: #19253A;
+  color: #22D3EE;
   fill: #22D3EE;
 }
-.react-flow__minimap {
+.react-flow .react-flow__controls-button svg {
+  fill: none;
+  stroke: currentColor;
+}
+.react-flow .react-flow__minimap {
   overflow: hidden;
   border: 1px solid #263449;
   border-radius: 8px;
   background: #131D30;
+}
+.react-flow .react-flow__minimap-mask {
+  fill: #0B1020cc;
+}
+.react-flow .react-flow__minimap-node {
+  stroke: #0D1425;
+  stroke-width: 1px;
 }
 .react-flow__edge-textbg {
   fill: #0D1425;
