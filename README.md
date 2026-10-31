@@ -772,16 +772,6 @@ git commit -m "feat: describe the change"
 git push -u origin feat/your-feature
 ```
 
----
-
-## 📜 License and Disclaimer
-
-Add a `LICENSE` file and name your chosen license here.
-
-**Disclaimer:** CaseConnect is a decision-support tool that assists human investigators with evidence discovery. AI-generated output can contain errors and must be independently verified against the original documents. It does not determine guilt, establish legal conclusions, or replace professional investigation. All demonstration data is fictional.
-
----
-
 <div align="center">
 
 ### 🧩 From documents to evidence. From evidence to insight.
