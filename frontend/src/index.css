@@ -303,6 +303,12 @@
   .-right-24 {
     right: calc(var(--spacing) * -24);
   }
+  .right-0 {
+    right: 0px;
+  }
+  .top-full {
+    top: 100%;
+  }
   .right-1\.5 {
     right: calc(var(--spacing) * 1.5);
   }

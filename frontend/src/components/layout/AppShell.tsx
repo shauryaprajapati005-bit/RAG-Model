@@ -267,8 +267,8 @@ function Topbar({
         </div>
       </div>
 
-      {/* Topbar Actions: Search, Notifications, Profile */}
-      <div className="flex items-center gap-2 sm:gap-4">
+      {/* Topbar Actions: Search, Notifications, Profile (Position Context for Popovers) */}
+      <div className="relative flex items-center gap-2 sm:gap-4">
         {/* Mobile Search Button */}
         <button
           onClick={onOpenSearch}
@@ -301,72 +301,69 @@ function Topbar({
           </div>
         </div>
 
-        {/* Notifications Popover Container */}
-        <div className="relative">
-          <button
-            onClick={() => {
-              setNotifOpen((prev) => !prev);
-              setProfileOpen(false);
-            }}
-            data-testid="notifications-button"
-            className={`relative rounded-lg p-2 transition-colors ${
-              notifOpen
-                ? "bg-[#19253A] text-cyan-300 ring-1 ring-cyan-400/30"
-                : "text-slate-400 hover:bg-[#19253A] hover:text-slate-100"
-            }`}
-            title="Notifications"
-          >
-            <Bell size={17} />
-            {unreadCount > 0 && (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-            )}
-          </button>
-
-          <NotificationCenter
-            open={notifOpen}
-            onClose={() => setNotifOpen(false)}
-            investigations={investigations}
-            documents={documents}
-            onOpenDocument={onOpenDocument}
-            onSelectInvestigation={onSelectInvestigation}
-            unreadCount={unreadCount}
-            setUnreadCount={setUnreadCount}
-          />
-        </div>
+        {/* Notifications Button */}
+        <button
+          onClick={() => {
+            setNotifOpen((prev) => !prev);
+            setProfileOpen(false);
+          }}
+          data-testid="notifications-button"
+          className={`relative rounded-lg p-2 transition-colors ${
+            notifOpen
+              ? "bg-[#19253A] text-cyan-300 ring-1 ring-cyan-400/30"
+              : "text-slate-400 hover:bg-[#19253A] hover:text-slate-100"
+          }`}
+          title="Notifications"
+        >
+          <Bell size={17} />
+          {unreadCount > 0 && (
+            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+          )}
+        </button>
 
         <div className="hidden h-7 w-px bg-[#263449] sm:block" />
 
-        {/* Profile Menu Container */}
-        <div className="relative">
-          <button
-            onClick={() => {
-              setProfileOpen((prev) => !prev);
-              setNotifOpen(false);
-            }}
-            data-testid="profile-menu-button"
-            className={`flex items-center gap-2 rounded-lg p-1.5 transition-colors ${
-              profileOpen
-                ? "bg-[#19253A] ring-1 ring-cyan-400/30"
-                : "hover:bg-[#19253A]"
-            }`}
-            title="Investigator Profile & Telemetry"
-          >
-            <div className="relative grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-violet-400 to-cyan-400 text-xs font-bold text-[#0B1020]">
-              IN
-            </div>
-            <span className="hidden text-xs font-medium text-slate-300 lg:block">
-              Investigator
-            </span>
-          </button>
+        {/* Profile Button */}
+        <button
+          onClick={() => {
+            setProfileOpen((prev) => !prev);
+            setNotifOpen(false);
+          }}
+          data-testid="profile-menu-button"
+          className={`flex items-center gap-2 rounded-lg p-1.5 transition-colors ${
+            profileOpen
+              ? "bg-[#19253A] ring-1 ring-cyan-400/30"
+              : "hover:bg-[#19253A]"
+          }`}
+          title="Investigator Profile & Telemetry"
+        >
+          <div className="relative grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-violet-400 to-cyan-400 text-xs font-bold text-[#0B1020]">
+            IN
+          </div>
+          <span className="hidden text-xs font-medium text-slate-300 lg:block">
+            Investigator
+          </span>
+        </button>
 
-          <ProfileMenu
-            open={profileOpen}
-            onClose={() => setProfileOpen(false)}
-            investigationsCount={investigations.length}
-            documentsCount={documents.length}
-            onRefreshData={refreshState}
-          />
-        </div>
+        {/* Anchored Popovers (Positioned safely within the topbar boundaries) */}
+        <NotificationCenter
+          open={notifOpen}
+          onClose={() => setNotifOpen(false)}
+          investigations={investigations}
+          documents={documents}
+          onOpenDocument={onOpenDocument}
+          onSelectInvestigation={onSelectInvestigation}
+          unreadCount={unreadCount}
+          setUnreadCount={setUnreadCount}
+        />
+
+        <ProfileMenu
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          investigationsCount={investigations.length}
+          documentsCount={documents.length}
+          onRefreshData={refreshState}
+        />
       </div>
     </header>
   );

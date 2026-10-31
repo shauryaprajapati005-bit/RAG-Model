@@ -144,7 +144,15 @@ export function NotificationCenter({
       role="dialog"
       aria-label="Notification Center"
       data-testid="notification-center-popover"
-      className="absolute right-0 top-12 z-50 w-[360px] sm:w-[420px] overflow-hidden rounded-2xl border border-[#263449] bg-[#0D1425] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150"
+      style={{
+        position: "absolute",
+        right: 0,
+        top: "calc(100% + 12px)",
+        width: "min(390px, calc(100vw - 32px))",
+        maxWidth: "calc(100vw - 32px)",
+        zIndex: 50,
+      }}
+      className="overflow-hidden rounded-2xl border border-[#263449] bg-[#0D1425] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[#263449] bg-[#131D30] px-4 py-3">
