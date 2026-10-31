@@ -1,4 +1,4 @@
-import type { DocumentItem, Investigation, ChatMessage, GraphData } from "@/types";
+import type { DocumentItem, Investigation, ChatMessage, GraphData, TimelineEvent } from "@/types";
 
 const API_BASE = "http://localhost:8000/api";
 
@@ -103,6 +103,23 @@ export async function extractGraphApi(investigationId: string): Promise<GraphDat
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || "Failed to extract graph");
+  }
+  return res.json();
+}
+
+export async function fetchTimelineApi(investigationId: string): Promise<TimelineEvent[]> {
+  const res = await fetch(`${API_BASE}/investigations/${investigationId}/timeline`);
+  if (!res.ok) throw new Error("Failed to fetch timeline");
+  return res.json();
+}
+
+export async function extractTimelineApi(investigationId: string): Promise<TimelineEvent[]> {
+  const res = await fetch(`${API_BASE}/investigations/${investigationId}/timeline/extract`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to extract timeline");
   }
   return res.json();
 }

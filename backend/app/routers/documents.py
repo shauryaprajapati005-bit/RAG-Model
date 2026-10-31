@@ -10,6 +10,7 @@ from backend.app.services.pdf_service import PDFService
 from backend.app.services.embedding_service import EmbeddingService
 from backend.app.services.retrieval_service import RetrievalService
 from backend.app.services.graph_service import GraphService
+from backend.app.services.timeline_service import TimelineService
 
 router = APIRouter(tags=["Documents"])
 
@@ -86,12 +87,17 @@ async def upload_documents(
 
         uploaded_docs.append(DocumentItem(**doc_item))
 
-    # Trigger entity & relationship extraction for newly ingested chunks
+    # Trigger entity & relationship extraction and timeline event extraction
     if all_new_chunks:
         try:
             await GraphService.extract_and_store_graph(db, investigation_id, all_new_chunks)
         except Exception as graph_err:
             print(f"[Graph extraction during upload note]: {graph_err}")
+
+        try:
+            await TimelineService.extract_and_store_timeline(db, investigation_id, all_new_chunks)
+        except Exception as time_err:
+            print(f"[Timeline extraction during upload note]: {time_err}")
 
     # Update investigation's document count
     total_docs = await db["documents"].count_documents({"investigationId": investigation_id})
