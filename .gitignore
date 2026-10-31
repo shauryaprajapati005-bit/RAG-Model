@@ -21,6 +21,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.env
+.env
+backend/.env
 .env.local
 .env.*.local
 

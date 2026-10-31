@@ -29,6 +29,16 @@ class DocumentItem(BaseModel):
     pages: int = 0
     classification: str = "Pending classification"
 
+class ChunkItem(BaseModel):
+    id: str
+    investigationId: str
+    documentId: str
+    documentName: str
+    page: int
+    text: str
+    chunkIndex: int
+    embedding: Optional[List[float]] = None
+
 class Entity(BaseModel):
     id: str
     investigationId: str

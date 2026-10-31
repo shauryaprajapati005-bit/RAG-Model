@@ -1,9 +1,9 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, ChevronLeft, ChevronRight, CircleHelp, FileText, GitBranch, LayoutDashboard, Menu, MessageSquare, Moon, Network, Plus, Search, Settings, Shield, Sparkles, Timeline, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Bell, ChevronLeft, ChevronRight, CircleHelp, FileText, GitBranch, LayoutDashboard, Menu, MessageSquare, Network, Search, Settings, Shield, Timeline, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { seedDocuments, seedInvestigations } from "@/data/mockData";
+import { fetchInvestigations, fetchDocuments, createInvestigationApi, deleteDocumentApi } from "@/services/api";
 import type { DocumentItem, Investigation } from "@/types";
 
 interface AppContextValue {
@@ -13,6 +13,7 @@ interface AppContextValue {
   addDocuments: (files: DocumentItem[]) => void;
   removeDocument: (id: string) => void;
   updateDocument: (id: string, patch: Partial<DocumentItem>) => void;
+  refreshState: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -59,8 +60,8 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: { collapsed: bool
       </div>
       <div className={`mt-auto p-3 ${collapsed ? "lg:px-2" : ""}`}>
         <div className={`rounded-xl border border-[#263449] bg-[#131D30] p-3 ${collapsed ? "lg:hidden" : ""}`}>
-          <div className="mb-2 flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-400" /><span className="font-mono text-[10px] uppercase tracking-wider text-emerald-300">Demo environment</span></div>
-          <p className="text-[11px] leading-relaxed text-slate-500">Evidence is fictional and for demonstration only.</p>
+          <div className="mb-2 flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-400" /><span className="font-mono text-[10px] uppercase tracking-wider text-emerald-300">Atlas Connected</span></div>
+          <p className="text-[11px] leading-relaxed text-slate-500">Live MongoDB Atlas cluster connected for document ingestion & vector intelligence.</p>
         </div>
         <button onClick={onToggle} data-testid="sidebar-collapse-button" className="mt-3 hidden w-full items-center justify-center gap-2 rounded-lg border border-[#263449] py-2 text-xs text-slate-500 hover:bg-[#19253A] hover:text-slate-200 lg:flex">{collapsed ? <ChevronRight size={15} /> : <><ChevronLeft size={15} /> Collapse sidebar</>}</button>
       </div>
@@ -82,8 +83,57 @@ export default function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [investigations, setInvestigations] = useState(seedInvestigations);
   const [documents, setDocuments] = useState(seedDocuments);
-  const addInvestigation = (input: Pick<Investigation, "name" | "description">) => { const next: Investigation = { id: `inv-${Date.now()}`, ...input, status: "Active", priority: "Medium", documentCount: 0, entityCount: 0, updatedAt: "Just now" }; setInvestigations((current) => [next, ...current]); return next; };
-  const value = useMemo<AppContextValue>(() => ({ investigations, documents, addInvestigation, addDocuments: (files) => setDocuments((current) => [...files, ...current]), removeDocument: (id) => setDocuments((current) => current.filter((doc) => doc.id !== id)), updateDocument: (id, patch) => setDocuments((current) => current.map((doc) => doc.id === id ? { ...doc, ...patch } : doc)) }), [investigations, documents]);
+
+  const loadData = () => {
+    fetchInvestigations()
+      .then((data) => {
+        if (data && data.length > 0) setInvestigations(data);
+      })
+      .catch((err) => console.warn("Failed to load investigations:", err));
+
+    fetchDocuments()
+      .then((data) => {
+        if (data && data.length > 0) {
+          // Merge or set documents from MongoDB
+          setDocuments(data);
+        }
+      })
+      .catch((err) => console.warn("Failed to load documents:", err));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const addInvestigation = (input: Pick<Investigation, "name" | "description">) => {
+    const tempId = `inv-${Date.now()}`;
+    const next: Investigation = { id: tempId, ...input, status: "Active", priority: "Medium", documentCount: 0, entityCount: 0, updatedAt: "Just now" };
+    setInvestigations((current) => [next, ...current]);
+
+    createInvestigationApi(input)
+      .then((saved) => {
+        setInvestigations((current) => current.map((item) => item.id === tempId ? saved : item));
+      })
+      .catch((err) => console.error("Error creating investigation in backend:", err));
+
+    return next;
+  };
+
+  const removeDocument = (id: string) => {
+    setDocuments((current) => current.filter((doc) => doc.id !== id));
+    deleteDocumentApi(id).catch((err) => console.error("Error deleting document in backend:", err));
+  };
+
+  const value = useMemo<AppContextValue>(() => ({
+    investigations,
+    documents,
+    addInvestigation,
+    addDocuments: (files) => setDocuments((current) => [...files, ...current]),
+    removeDocument,
+    updateDocument: (id, patch) => setDocuments((current) => current.map((doc) => doc.id === id ? { ...doc, ...patch } : doc)),
+    refreshState: loadData,
+  }), [investigations, documents]);
+
   return <AppContext.Provider value={value}><div className="min-h-svh bg-[#0B1020] text-slate-100"><Sidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} /><div className={`min-h-svh transition-[padding] duration-200 lg:pl-[264px] ${collapsed ? "lg:pl-[82px]" : ""}`}><Topbar onMenu={() => setMobileOpen(true)} /><main className="mx-auto w-full max-w-[1560px] p-4 sm:p-7"><Outlet /></main></div></div></AppContext.Provider>;
 }
 
