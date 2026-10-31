@@ -1,1 +1,3 @@
-# CaseConnect services package
+from backend.app.services.pdf_service import PDFService
+
+__all__ = ["PDFService"]
