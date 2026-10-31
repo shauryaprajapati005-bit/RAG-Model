@@ -9,6 +9,7 @@ from backend.app.models.schemas import DocumentItem, ChunkItem
 from backend.app.services.pdf_service import PDFService
 from backend.app.services.embedding_service import EmbeddingService
 from backend.app.services.retrieval_service import RetrievalService
+from backend.app.services.graph_service import GraphService
 
 router = APIRouter(tags=["Documents"])
 
@@ -29,6 +30,7 @@ async def upload_documents(
         raise HTTPException(status_code=404, detail="Investigation not found")
 
     uploaded_docs = []
+    all_new_chunks = []
 
     for file in files:
         if not file.filename.lower().endswith(".pdf"):
@@ -80,8 +82,16 @@ async def upload_documents(
         # Insert chunks into MongoDB
         if chunks_to_insert:
             await db["chunks"].insert_many(chunks_to_insert)
+            all_new_chunks.extend(chunks_to_insert)
 
         uploaded_docs.append(DocumentItem(**doc_item))
+
+    # Trigger entity & relationship extraction for newly ingested chunks
+    if all_new_chunks:
+        try:
+            await GraphService.extract_and_store_graph(db, investigation_id, all_new_chunks)
+        except Exception as graph_err:
+            print(f"[Graph extraction during upload note]: {graph_err}")
 
     # Update investigation's document count
     total_docs = await db["documents"].count_documents({"investigationId": investigation_id})

@@ -32,6 +32,23 @@ export interface Entity {
   color: string;
 }
 
+export interface RelationshipEdge {
+  id: string;
+  investigationId: string;
+  source: string;
+  target: string;
+  label: string;
+  status: "Confirmed" | "Possible";
+  document: string;
+  page: number;
+  quote?: string;
+}
+
+export interface GraphData {
+  entities: Entity[];
+  edges: RelationshipEdge[];
+}
+
 export interface TimelineEvent {
   id: string;
   date: string;

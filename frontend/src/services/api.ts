@@ -1,4 +1,4 @@
-import type { DocumentItem, Investigation, ChatMessage } from "@/types";
+import type { DocumentItem, Investigation, ChatMessage, GraphData } from "@/types";
 
 const API_BASE = "http://localhost:8000/api";
 
@@ -88,4 +88,21 @@ export async function clearChatHistoryApi(investigationId: string): Promise<void
   await fetch(`${API_BASE}/investigations/${investigationId}/messages`, {
     method: "DELETE",
   });
+}
+
+export async function fetchGraphApi(investigationId: string): Promise<GraphData> {
+  const res = await fetch(`${API_BASE}/investigations/${investigationId}/graph`);
+  if (!res.ok) throw new Error("Failed to fetch graph data");
+  return res.json();
+}
+
+export async function extractGraphApi(investigationId: string): Promise<GraphData> {
+  const res = await fetch(`${API_BASE}/investigations/${investigationId}/graph/extract`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to extract graph");
+  }
+  return res.json();
 }

@@ -47,6 +47,21 @@ class Entity(BaseModel):
     detail: str
     color: str
 
+class RelationshipEdge(BaseModel):
+    id: str
+    investigationId: str
+    source: str
+    target: str
+    label: str
+    status: Literal["Confirmed", "Possible"] = "Confirmed"
+    document: str
+    page: int
+    quote: str
+
+class GraphData(BaseModel):
+    entities: List[Entity]
+    edges: List[RelationshipEdge]
+
 class TimelineEvent(BaseModel):
     id: str
     investigationId: str
