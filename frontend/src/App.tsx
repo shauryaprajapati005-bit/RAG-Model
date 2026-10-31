@@ -4,6 +4,7 @@ import Dashboard from "@/pages/Dashboard";
 import Documents from "@/pages/Documents";
 import InvestigationWorkspace from "@/pages/InvestigationWorkspace";
 import Investigations from "@/pages/Investigations";
+import WorkspaceHub from "@/pages/WorkspaceHub";
 import Settings from "@/pages/Settings";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/investigations" element={<Investigations />} />
+        <Route path="/workspace" element={<WorkspaceHub />} />
         <Route path="/investigation/:id" element={<InvestigationWorkspace />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/settings" element={<Settings />} />
