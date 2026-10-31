@@ -123,3 +123,8 @@ export async function extractTimelineApi(investigationId: string): Promise<Timel
   }
   return res.json();
 }
+
+
+export function getDocumentViewUrl(documentId: string): string {
+  return `http://localhost:8000/api/documents/${documentId}/view`;
+}

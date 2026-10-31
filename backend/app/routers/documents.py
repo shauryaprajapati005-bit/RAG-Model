@@ -1,7 +1,9 @@
+import os
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Query, BackgroundTasks
+from fastapi.responses import FileResponse, HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from backend.app.database import get_database
@@ -13,6 +15,9 @@ from backend.app.services.graph_service import GraphService
 from backend.app.services.timeline_service import TimelineService
 
 router = APIRouter(tags=["Documents"])
+
+UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 def format_file_size(bytes_len: int) -> str:
     if bytes_len < 1024 * 1024:
@@ -61,6 +66,14 @@ async def upload_documents(
         size_str = format_file_size(len(file_bytes))
         doc_id = f"doc-{uuid.uuid4().hex[:10]}"
         now_str = datetime.now().strftime("%d %b %Y")
+
+        # Save physical PDF binary to disk for viewing & downloading
+        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
+        try:
+            with open(file_path, "wb") as f:
+                f.write(file_bytes)
+        except Exception as save_err:
+            print(f"[Upload save warning]: {save_err}")
 
         # Process PDF: Extract text per page and generate chunks
         processed = PDFService.process_pdf(
@@ -117,6 +130,158 @@ async def upload_documents(
 
     return uploaded_docs
 
+@router.get("/api/documents/{document_id}/view")
+async def view_document_file(
+    document_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Serves the document file directly for in-browser opening/viewing.
+    If the uploaded PDF exists on disk, streams it as application/pdf.
+    If the binary was from an earlier session, renders a high-fidelity reader
+    using the extracted page text stored in MongoDB Atlas.
+    """
+    doc = await db["documents"].find_one({"id": document_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    filename = doc.get("name", "Document.pdf")
+    file_path = os.path.join(UPLOAD_DIR, f"{document_id}.pdf")
+
+    if os.path.exists(file_path):
+        return FileResponse(
+            file_path,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{filename}"'}
+        )
+
+    # Fallback: render text chunks from MongoDB
+    chunks_cursor = db["chunks"].find({"documentId": document_id}, {"_id": 0}).sort("page", 1)
+    chunks = await chunks_cursor.to_list(length=300)
+
+    pages_dict: Dict[int, List[str]] = {}
+    for c in chunks:
+        p = c.get("page", 1)
+        if p not in pages_dict:
+            pages_dict[p] = []
+        pages_dict[p].append(c.get("text", ""))
+
+    pages_html_parts = []
+    if pages_dict:
+        for page_num in sorted(pages_dict.keys()):
+            page_text = "\n\n".join(pages_dict[page_num])
+            escaped_text = page_text.replace("<", "&lt;").replace(">", "&gt;")
+            pages_html_parts.append(f"""
+            <div style="background: #131D30; border: 1px solid #263449; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #263449; padding-bottom: 12px; margin-bottom: 16px;">
+                    <span style="font-family: monospace; font-size: 11px; text-transform: uppercase; color: #22D3EE; letter-spacing: 0.1em; font-weight: 600;">PAGE {page_num}</span>
+                    <span style="font-size: 11px; color: #64748B;">Extracted Evidence Content</span>
+                </div>
+                <div style="font-size: 14px; line-height: 1.8; color: #CBD5E1; white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">{escaped_text}</div>
+            </div>
+            """)
+    else:
+        pages_html_parts.append("""
+        <div style="background: #131D30; border: 1px solid #263449; border-radius: 12px; padding: 32px; text-align: center; color: #94A3B8;">
+            No page text recorded for this document.
+        </div>
+        """)
+
+    doc_pages = doc.get("pages", len(pages_dict) or 1)
+    doc_size = doc.get("size", "Unknown size")
+    doc_uploaded = doc.get("uploadedAt", "Recently")
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{filename} - CaseConnect Evidence Viewer</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            background-color: #0B1020;
+            color: #F8FAFC;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 24px;
+        }}
+        .header {{
+            max-width: 900px;
+            margin: 0 auto 24px auto;
+            background: #131D30;
+            border: 1px solid #263449;
+            border-radius: 12px;
+            padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }}
+        .title-area h1 {{
+            font-size: 18px;
+            font-weight: 600;
+            color: #F1F5F9;
+        }}
+        .title-area p {{
+            font-size: 12px;
+            color: #64748B;
+            margin-top: 4px;
+        }}
+        .badge {{
+            display: inline-block;
+            background: rgba(34, 211, 238, 0.1);
+            color: #22D3EE;
+            border: 1px solid rgba(34, 211, 238, 0.25);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-family: monospace;
+            text-transform: uppercase;
+        }}
+        .container {{
+            max-width: 900px;
+            margin: 0 auto;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title-area">
+            <span class="badge">EVIDENCE REPORT</span>
+            <h1 style="margin-top: 8px;">{filename}</h1>
+            <p>{doc_pages} pages &bull; {doc_size} &bull; Uploaded {doc_uploaded} &bull; Stored in MongoDB Atlas</p>
+        </div>
+    </div>
+    <div class="container">
+        {"".join(pages_html_parts)}
+    </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content, media_type="text/html")
+
+@router.get("/api/documents/{document_id}/content")
+async def get_document_content(
+    document_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    doc = await db["documents"].find_one({"id": document_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_path = os.path.join(UPLOAD_DIR, f"{document_id}.pdf")
+    has_pdf = os.path.exists(file_path)
+
+    chunks_cursor = db["chunks"].find({"documentId": document_id}, {"_id": 0}).sort("page", 1)
+    chunks = await chunks_cursor.to_list(length=300)
+
+    return {
+        "document": doc,
+        "hasPdf": has_pdf,
+        "viewUrl": f"/api/documents/{document_id}/view",
+        "chunks": chunks
+    }
+
 @router.get("/api/investigations/{investigation_id}/documents", response_model=List[DocumentItem])
 async def get_investigation_documents(
     investigation_id: str,
@@ -142,6 +307,14 @@ async def delete_document(
         raise HTTPException(status_code=404, detail="Document not found")
 
     investigation_id = doc.get("investigationId")
+
+    # Delete physical file if present
+    file_path = os.path.join(UPLOAD_DIR, f"{document_id}.pdf")
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
 
     # Delete document and its chunks
     await db["documents"].delete_one({"id": document_id})
