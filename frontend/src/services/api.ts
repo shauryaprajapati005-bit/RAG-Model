@@ -1,4 +1,4 @@
-import type { DocumentItem, Investigation } from "@/types";
+import type { DocumentItem, Investigation, ChatMessage } from "@/types";
 
 const API_BASE = "http://localhost:8000/api";
 
@@ -63,4 +63,29 @@ export async function fetchChunks(investigationId: string, documentId?: string) 
   const res = await fetch(url.toString());
   if (!res.ok) throw new Error("Failed to fetch chunks");
   return res.json();
+}
+
+export async function askAssistantApi(investigationId: string, question: string): Promise<ChatMessage> {
+  const res = await fetch(`${API_BASE}/investigations/${investigationId}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to query investigation assistant");
+  }
+  return res.json();
+}
+
+export async function fetchChatHistoryApi(investigationId: string): Promise<ChatMessage[]> {
+  const res = await fetch(`${API_BASE}/investigations/${investigationId}/messages`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function clearChatHistoryApi(investigationId: string): Promise<void> {
+  await fetch(`${API_BASE}/investigations/${investigationId}/messages`, {
+    method: "DELETE",
+  });
 }
