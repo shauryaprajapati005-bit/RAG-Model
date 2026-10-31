@@ -10,7 +10,7 @@ from backend.app.config import settings
 from backend.app.models.schemas import TimelineEvent
 
 class TimelineService:
-    MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    MODELS = ["gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash"]
 
     @classmethod
     def get_client(cls) -> genai.Client:

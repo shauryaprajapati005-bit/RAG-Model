@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Query, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from backend.app.database import get_database
@@ -19,9 +19,26 @@ def format_file_size(bytes_len: int) -> str:
         return f"{max(1, bytes_len // 1024)} KB"
     return f"{(bytes_len / (1024 * 1024)):.1f} MB"
 
+async def _extract_graph_and_timeline_bg(investigation_id: str, chunks: List[Dict[str, Any]]):
+    try:
+        from backend.app.database import get_database
+        db = get_database()
+        try:
+            await GraphService.extract_and_store_graph(db, investigation_id, chunks)
+        except Exception as graph_err:
+            print(f"[BG Graph extraction note]: {graph_err}")
+
+        try:
+            await TimelineService.extract_and_store_timeline(db, investigation_id, chunks)
+        except Exception as time_err:
+            print(f"[BG Timeline extraction note]: {time_err}")
+    except Exception as e:
+        print(f"[BG Task general error]: {e}")
+
 @router.post("/api/investigations/{investigation_id}/documents/upload", response_model=List[DocumentItem])
 async def upload_documents(
     investigation_id: str,
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
@@ -87,17 +104,9 @@ async def upload_documents(
 
         uploaded_docs.append(DocumentItem(**doc_item))
 
-    # Trigger entity & relationship extraction and timeline event extraction
+    # Trigger entity & relationship extraction and timeline event extraction in the background
     if all_new_chunks:
-        try:
-            await GraphService.extract_and_store_graph(db, investigation_id, all_new_chunks)
-        except Exception as graph_err:
-            print(f"[Graph extraction during upload note]: {graph_err}")
-
-        try:
-            await TimelineService.extract_and_store_timeline(db, investigation_id, all_new_chunks)
-        except Exception as time_err:
-            print(f"[Timeline extraction during upload note]: {time_err}")
+        background_tasks.add_task(_extract_graph_and_timeline_bg, investigation_id, all_new_chunks)
 
     # Update investigation's document count
     total_docs = await db["documents"].count_documents({"investigationId": investigation_id})
