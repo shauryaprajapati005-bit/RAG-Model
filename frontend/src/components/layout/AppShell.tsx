@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Bell, ChevronLeft, ChevronRight, CircleHelp, FileText, GitBranch, LayoutDashboard, Menu, MessageSquare, Moon, Network, Plus, Search, Settings, Shield, Sparkles, Timeline, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,10 +6,30 @@ import { Input } from "@/components/ui/input";
 import { seedDocuments, seedInvestigations } from "@/data/mockData";
 import type { DocumentItem, Investigation } from "@/types";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    },
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed: ${response.status}`);
+  }
+
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
 interface AppContextValue {
   investigations: Investigation[];
   documents: DocumentItem[];
-  addInvestigation: (input: Pick<Investigation, "name" | "description">) => Investigation;
+  addInvestigation: (input: Pick<Investigation, "name" | "description">) => Promise<Investigation>;
   addDocuments: (files: DocumentItem[]) => void;
   removeDocument: (id: string) => void;
   updateDocument: (id: string, patch: Partial<DocumentItem>) => void;
@@ -80,10 +100,45 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [investigations, setInvestigations] = useState(seedInvestigations);
-  const [documents, setDocuments] = useState(seedDocuments);
-  const addInvestigation = (input: Pick<Investigation, "name" | "description">) => { const next: Investigation = { id: `inv-${Date.now()}`, ...input, status: "Active", priority: "Medium", documentCount: 0, entityCount: 0, updatedAt: "Just now" }; setInvestigations((current) => [next, ...current]); return next; };
-  const value = useMemo<AppContextValue>(() => ({ investigations, documents, addInvestigation, addDocuments: (files) => setDocuments((current) => [...files, ...current]), removeDocument: (id) => setDocuments((current) => current.filter((doc) => doc.id !== id)), updateDocument: (id, patch) => setDocuments((current) => current.map((doc) => doc.id === id ? { ...doc, ...patch } : doc)) }), [investigations, documents]);
+  const [investigations, setInvestigations] = useState<Investigation[]>(seedInvestigations);
+  const [documents, setDocuments] = useState<DocumentItem[]>(seedDocuments);
+
+  useEffect(() => {
+    let ignore = false;
+    apiFetch<Investigation[]>("/investigations")
+      .then((data) => {
+        if (!ignore) setInvestigations(data);
+      })
+      .catch(() => undefined);
+
+    apiFetch<DocumentItem[]>("/documents")
+      .then((data) => {
+        if (!ignore) setDocuments(data);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const addInvestigation = async (input: Pick<Investigation, "name" | "description">) => {
+    const created = await apiFetch<Investigation>("/investigations", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    setInvestigations((current) => [created, ...current]);
+    return created;
+  };
+
+  const addDocuments = (files: DocumentItem[]) => setDocuments((current) => [...files, ...current]);
+  const removeDocument = async (id: string) => {
+    await apiFetch(`/documents/${id}`, { method: "DELETE" });
+    setDocuments((current) => current.filter((doc) => doc.id !== id));
+  };
+  const updateDocument = (id: string, patch: Partial<DocumentItem>) => setDocuments((current) => current.map((doc) => (doc.id === id ? { ...doc, ...patch } : doc)));
+
+  const value = useMemo<AppContextValue>(() => ({ investigations, documents, addInvestigation, addDocuments, removeDocument, updateDocument }), [investigations, documents]);
   return <AppContext.Provider value={value}><div className="min-h-svh bg-[#0B1020] text-slate-100"><Sidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} /><div className={`min-h-svh transition-[padding] duration-200 lg:pl-[264px] ${collapsed ? "lg:pl-[82px]" : ""}`}><Topbar onMenu={() => setMobileOpen(true)} /><main className="mx-auto w-full max-w-[1560px] p-4 sm:p-7"><Outlet /></main></div></div></AppContext.Provider>;
 }
 
