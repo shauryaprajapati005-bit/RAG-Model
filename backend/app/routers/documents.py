@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from backend.app.database import get_database
 from backend.app.models.schemas import DocumentItem, ChunkItem
 from backend.app.services.pdf_service import PDFService
+from backend.app.services.embedding_service import EmbeddingService
+from backend.app.services.retrieval_service import RetrievalService
 
 router = APIRouter(tags=["Documents"])
 
@@ -48,6 +50,19 @@ async def upload_documents(
             investigation_id=investigation_id
         )
 
+        # Generate Gemini embeddings for each chunk
+        chunks_to_insert = processed["chunks"]
+        if chunks_to_insert:
+            chunk_texts = [c["text"] for c in chunks_to_insert]
+            try:
+                embeddings = EmbeddingService.get_embeddings_batch(chunk_texts)
+                for c, emb in zip(chunks_to_insert, embeddings):
+                    c["embedding"] = emb
+            except Exception as e:
+                print(f"[Embedding warning] Could not compute embeddings during upload: {e}")
+                for c in chunks_to_insert:
+                    c["embedding"] = []
+
         doc_item = {
             "id": doc_id,
             "investigationId": investigation_id,
@@ -63,8 +78,8 @@ async def upload_documents(
         await db["documents"].insert_one(dict(doc_item))
 
         # Insert chunks into MongoDB
-        if processed["chunks"]:
-            await db["chunks"].insert_many(processed["chunks"])
+        if chunks_to_insert:
+            await db["chunks"].insert_many(chunks_to_insert)
 
         uploaded_docs.append(DocumentItem(**doc_item))
 
@@ -130,3 +145,18 @@ async def get_investigation_chunks(
 
     cursor = db["chunks"].find(query, {"_id": 0}).limit(limit)
     return await cursor.to_list(length=limit)
+
+@router.get("/api/investigations/{investigation_id}/search")
+async def search_investigation_evidence(
+    investigation_id: str,
+    query: str = Query(..., min_length=1),
+    limit: int = Query(5, ge=1, le=20),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    results = await RetrievalService.retrieve_relevant_chunks(
+        db=db,
+        investigation_id=investigation_id,
+        query=query,
+        limit=limit
+    )
+    return results
